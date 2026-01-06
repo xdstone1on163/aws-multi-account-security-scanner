@@ -2,6 +2,77 @@
 
 从多个 AWS member account 中自动提取 WAF v2 Web ACL 配置的 Python 工具集。
 
+## 🚀 快速开始
+
+**新用户推荐：使用交互式脚本**
+
+```bash
+# 1. 运行主扫描工具（自动检查环境、登录 SSO、扫描 WAF 配置）
+./waf_scan.sh
+
+# 2. 根据菜单选择扫描模式（推荐选择"1-快速扫描"）
+
+# 3. 扫描完成后，使用分析工具查看结果
+python3 analyze_waf_config.py waf_config_*.json --list
+```
+
+**高级用户：直接使用 Python 脚本**
+
+```bash
+# 快速扫描（使用配置文件）
+python3 get_waf_config.py
+
+# 自定义扫描
+python3 get_waf_config.py -p profile1 profile2 -r us-east-1 us-west-2
+```
+
+## 📁 工具脚本说明
+
+| 脚本 | 类型 | 用途 | 使用场景 |
+|------|------|------|----------|
+| **waf_scan.sh** | Shell | **主入口** - 交互式扫描工具 | ⭐ 推荐新用户使用，提供完整的环境检查和菜单引导 |
+| **get_waf_config.py** | Python | 核心提取工具 | 从 AWS 提取 WAF 配置，可独立使用或通过 waf_scan.sh 调用 |
+| **analyze_waf_config.py** | Python | 配置分析工具 | 分析扫描结果，生成报告和统计 |
+| **check_waf_resources.sh** | Shell | 调试验证工具 | 调试特定 Web ACL 的资源关联问题 |
+| **security_check.sh** | Shell | 安全检查工具 | 分享代码前检查敏感信息 |
+
+### 调用流程
+
+```
+┌─────────────────────┐
+│   新用户开始使用      │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  ./waf_scan.sh      │  ← 主入口（推荐）
+│  - 检查环境          │
+│  - SSO 登录         │
+│  - 交互式菜单        │
+└──────────┬──────────┘
+           │
+           │ 自动调用
+           ▼
+┌─────────────────────┐
+│ get_waf_config.py   │  ← 核心扫描
+│ 提取 WAF 配置        │
+└──────────┬──────────┘
+           │
+           │ 生成 JSON
+           ▼
+┌─────────────────────┐
+│ analyze_waf_config.py│ ← 分析结果
+│ 生成报告和统计       │
+└─────────────────────┘
+
+            可选工具
+┌──────────────────────┬──────────────────────┐
+│                      │                      │
+│ check_waf_resources.sh│ security_check.sh    │
+│ (调试资源关联)        │ (检查敏感信息)        │
+└──────────────────────┴──────────────────────┘
+```
+
 ## 功能特性
 
 ✅ 支持 AWS Identity Center (SSO) 多账户认证
@@ -14,14 +85,7 @@
 ✅ 数据分析和可视化工具
 ✅ CSV 导出功能
 ✅ 关联资源统计分析
-
-## 文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `get_waf_config.py` | 主程序：从 AWS 账户提取 WAF 配置 |
-| `analyze_waf_config.py` | 分析工具：解析和分析导出的配置 |
-| `README_WAF.md` | 本文档 |
+✅ 交互式扫描脚本，易于使用
 
 ## 前置要求
 
@@ -93,20 +157,38 @@ aws_secret_access_key = YOUR_SECRET_KEY
 
 ## 使用指南
 
-### 第一步：提取 WAF 配置
+### 方式一：使用交互式脚本（推荐新用户）
+
+**主扫描工具：`waf_scan.sh`**
+
+```bash
+./waf_scan.sh
+```
+
+这个脚本会自动：
+1. ✅ 检查环境依赖（Python、boto3、AWS CLI）
+2. ✅ 检查配置文件 `waf_scan_config.json`
+3. ✅ 验证 AWS SSO 登录状态
+4. ✅ 提供交互式菜单选择扫描模式
+
+**菜单选项：**
+- **选项 1** - 快速扫描：使用配置文件自动扫描所有账户
+- **选项 2** - 快速测试：单账户单区域快速验证
+- **选项 3** - 自定义扫描：手动指定参数
+- **选项 4** - 调试模式：查看详细日志
+- **选项 5** - 查看帮助
+
+### 方式二：直接使用 Python 脚本（高级用户）
 
 #### 基本用法
 ```bash
-# 使用默认配置（扫描所有 SSO profile）
+# 使用配置文件（waf_scan_config.json）
 python3 get_waf_config.py
-```
 
-#### 指定 Profile
-```bash
-# 扫描单个账户
+# 指定单个账户
 python3 get_waf_config.py -p AdministratorAccess-275261018177
 
-# 扫描多个账户
+# 指定多个账户
 python3 get_waf_config.py -p profile1 profile2 profile3
 ```
 
@@ -126,6 +208,9 @@ python3 get_waf_config.py -r us-east-1 us-east-2 us-west-1 us-west-2 \
 ```bash
 # 指定输出文件
 python3 get_waf_config.py -o my_waf_report.json
+
+# 启用调试模式
+python3 get_waf_config.py --debug
 
 # 串行扫描（禁用并行）
 python3 get_waf_config.py --no-parallel
@@ -168,6 +253,8 @@ python3 get_waf_config.py --help
 ```
 
 ### 第二步：分析 WAF 配置
+
+**分析工具：`analyze_waf_config.py`**
 
 #### 列出所有 Web ACL
 ```bash
@@ -339,6 +426,61 @@ python3 analyze_waf_config.py waf_config_20260105_143022.json
 | `resource_id` | 资源 ID | `my-alb/1234567890abcdef` |
 | `friendly_type` | 友好的资源类型名称 | `Application Load Balancer` |
 | `resource_type_api` | AWS API 资源类型 | `APPLICATION_LOAD_BALANCER` |
+
+## 调试和验证工具
+
+### 工具 1：调试特定 Web ACL 的资源关联
+
+**调试工具：`check_waf_resources.sh`**
+
+当你发现某个 Web ACL 的资源关联不正确时，可以使用这个工具进行验证：
+
+```bash
+./check_waf_resources.sh <profile-name> <web-acl-name>
+```
+
+**示例：**
+```bash
+./check_waf_resources.sh AdministratorAccess-813923830882 waf-demo-juice-shop-for-xizhi
+```
+
+**这个工具会：**
+1. 验证 AWS 访问权限
+2. 查找指定的 Web ACL
+3. 列出所有关联的资源（CloudFront、ALB 等）
+4. 检查 CloudFront 分配的 WAF 关联情况
+
+**使用场景：**
+- ✅ 验证 WAF ACL 是否正确关联到资源
+- ✅ 调试资源检测问题
+- ✅ 快速检查单个 ACL 的状态
+
+### 工具 2：安全检查工具
+
+**安全工具：`security_check.sh`**
+
+在分享代码或提交到 Git 前，运行这个脚本检查敏感信息：
+
+```bash
+./security_check.sh
+```
+
+**检查项目：**
+- ❌ WAF 配置输出文件（包含账户信息）
+- ❌ 硬编码的 AWS Profile 名称
+- ❌ 真实的 AWS 账户 ID
+- ❌ AWS 凭证信息
+- ❌ CSV 导出文件
+- ✅ .gitignore 配置正确性
+
+**快速清理命令：**
+```bash
+# 删除所有敏感文件
+rm -f waf_config_*.json *.csv
+
+# 检查 Git 状态
+git status
+```
 
 ## 常见问题
 

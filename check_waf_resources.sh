@@ -1,6 +1,9 @@
 #!/bin/bash
-# 手动检查 WAF Web ACL 的关联资源
-# 用于验证工具是否正确获取了资源
+# WAF Web ACL 资源关联检查工具
+# 用于验证和调试 WAF ACL 的关联资源
+#
+# 这是一个轻量级的调试工具，用于快速检查特定 Web ACL 的资源关联情况
+# 使用前请确保已通过 waf_scan.sh 完成环境检查和 SSO 登录
 
 set -e
 
@@ -24,6 +27,9 @@ if [ $# -lt 2 ]; then
     echo -e "${YELLOW}示例:${NC}"
     echo "  $0 AdministratorAccess-813923830882 waf-demo-juice-shop-for-xizhi"
     echo ""
+    echo -e "${YELLOW}提示:${NC}"
+    echo "  首次使用请先运行 ./waf_scan.sh 完成环境检查和 SSO 登录"
+    echo ""
     exit 1
 fi
 
@@ -37,22 +43,19 @@ echo "  Web ACL: $WEB_ACL_NAME"
 echo "  Region: $REGION"
 echo ""
 
-# 检查 SSO 登录状态
-echo -e "${BLUE}[1/4] 检查 SSO 登录状态...${NC}"
-if aws sts get-caller-identity --profile "$PROFILE" &>/dev/null; then
-    ACCOUNT_ID=$(aws sts get-caller-identity --profile "$PROFILE" --query Account --output text)
-    echo -e "  ${GREEN}✓${NC} 已登录，账户: $ACCOUNT_ID"
-else
-    echo -e "  ${RED}✗${NC} 未登录或 token 过期"
+# 快速检查 SSO 登录状态
+echo -e "${BLUE}[1/4] 验证 AWS 访问权限...${NC}"
+if ! ACCOUNT_ID=$(aws sts get-caller-identity --profile "$PROFILE" --query Account --output text 2>/dev/null); then
+    echo -e "  ${RED}✗${NC} 无法访问 AWS API"
     echo ""
-    read -p "是否现在登录? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        aws sso login --profile "$PROFILE"
-    else
-        exit 1
-    fi
+    echo -e "${YELLOW}请先登录 AWS SSO:${NC}"
+    echo "  aws sso login --profile $PROFILE"
+    echo ""
+    echo -e "${YELLOW}或运行主扫描工具:${NC}"
+    echo "  ./waf_scan.sh"
+    exit 1
 fi
+echo -e "  ${GREEN}✓${NC} 已认证，账户: $ACCOUNT_ID"
 echo ""
 
 # 获取 Web ACL 详情
