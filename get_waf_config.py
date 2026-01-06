@@ -331,32 +331,63 @@ class WAFConfigExtractor:
 
             print(f"✓ 账户 ID: {account_info['account_id']}")
 
-            # 扫描每个区域
+            # ========================================
+            # 步骤 1: 扫描 CLOUDFRONT scope Web ACLs
+            # CloudFront 是全球服务，必须始终从 us-east-1 查询
+            # ========================================
+            print(f"\n  扫描 CLOUDFRONT scope (全球服务)...")
+            cloudfront_acls = self.get_web_acls_in_region(
+                session, 'us-east-1', 'CLOUDFRONT'
+            )
+
+            # 如果有 CloudFront ACLs，将其添加到 us-east-1 区域结果
+            # 如果 us-east-1 不在扫描列表中，仍然要添加它
+            if cloudfront_acls:
+                cloudfront_region_result = {
+                    'region': 'us-east-1',
+                    'cloudfront_acls': cloudfront_acls,
+                    'regional_acls': []
+                }
+                # 检查是否已经有 us-east-1 的结果（从后续区域扫描中）
+                us_east_1_exists = False
+                for idx, r in enumerate(account_result['regions']):
+                    if r['region'] == 'us-east-1':
+                        account_result['regions'][idx]['cloudfront_acls'] = cloudfront_acls
+                        us_east_1_exists = True
+                        break
+                if not us_east_1_exists:
+                    account_result['regions'].append(cloudfront_region_result)
+
+            # ========================================
+            # 步骤 2: 扫描各个区域的 REGIONAL scope Web ACLs
+            # ========================================
             for region in self.regions:
                 print(f"\n  扫描区域: {region}")
 
-                region_result = {
-                    'region': region,
-                    'cloudfront_acls': [],
-                    'regional_acls': []
-                }
+                # 检查是否已经有这个区域的结果（可能在步骤1中添加了 us-east-1）
+                region_result = None
+                for r in account_result['regions']:
+                    if r['region'] == region:
+                        region_result = r
+                        break
 
-                # CLOUDFRONT scope (只在 us-east-1 有效)
-                if region == 'us-east-1':
-                    print(f"    检查 CLOUDFRONT scope...")
-                    region_result['cloudfront_acls'] = self.get_web_acls_in_region(
-                        session, region, 'CLOUDFRONT'
-                    )
+                if region_result is None:
+                    region_result = {
+                        'region': region,
+                        'cloudfront_acls': [],
+                        'regional_acls': []
+                    }
 
-                # REGIONAL scope
+                # REGIONAL scope - 所有区域都扫描
                 print(f"    检查 REGIONAL scope...")
                 region_result['regional_acls'] = self.get_web_acls_in_region(
                     session, region, 'REGIONAL'
                 )
 
                 # 只保存有 ACL 的区域
-                if region_result['cloudfront_acls'] or region_result['regional_acls']:
-                    account_result['regions'].append(region_result)
+                if region_result not in account_result['regions']:
+                    if region_result['cloudfront_acls'] or region_result['regional_acls']:
+                        account_result['regions'].append(region_result)
 
         except Exception as e:
             account_result['error'] = str(e)
