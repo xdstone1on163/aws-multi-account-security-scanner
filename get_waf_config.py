@@ -8,10 +8,33 @@ AWS Multi-Account WAF Configuration Extractor
 
 import boto3
 import json
+import os
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
+
+
+def load_config_file(config_path: str = 'waf_scan_config.json') -> Optional[Dict]:
+    """
+    从配置文件加载扫描配置
+
+    Args:
+        config_path: 配置文件路径
+
+    Returns:
+        配置字典，如果文件不存在则返回 None
+    """
+    if not os.path.exists(config_path):
+        return None
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+    except Exception as e:
+        print(f"⚠️  警告: 无法读取配置文件 {config_path}: {str(e)}")
+        return None
 
 
 class WAFConfigExtractor:
@@ -27,17 +50,19 @@ class WAFConfigExtractor:
         'eu-central-1',   # 欧洲（法兰克福）
     ]
 
-    def __init__(self, profile_names: List[str], regions: List[str] = None):
+    def __init__(self, profile_names: List[str], regions: List[str] = None, debug: bool = False):
         """
         初始化提取器
 
         Args:
             profile_names: SSO profile 名称列表
             regions: 要扫描的区域列表，默认使用 COMMON_REGIONS
+            debug: 是否启用调试模式
         """
         self.profile_names = profile_names
         self.regions = regions or self.COMMON_REGIONS
         self.results = []
+        self.debug = debug
 
     def get_account_info(self, session: boto3.Session) -> Dict[str, str]:
         """获取账户信息"""
@@ -129,7 +154,7 @@ class WAFConfigExtractor:
                 'error': f'Failed to parse ARN: {str(e)}'
             }
 
-    def get_associated_resources(self, wafv2_client, web_acl_arn: str, scope: str) -> List[Dict]:
+    def get_associated_resources(self, wafv2_client, web_acl_arn: str, scope: str, debug: bool = False) -> List[Dict]:
         """
         获取 Web ACL 关联的 AWS 资源
 
@@ -137,43 +162,37 @@ class WAFConfigExtractor:
             wafv2_client: WAFv2 客户端
             web_acl_arn: Web ACL 的 ARN
             scope: CLOUDFRONT 或 REGIONAL
+            debug: 是否显示调试信息
 
         Returns:
             关联资源列表
         """
         associated_resources = []
 
-        try:
-            # 调用 list_resources_for_web_acl API
-            response = wafv2_client.list_resources_for_web_acl(
-                WebACLArn=web_acl_arn,
-                ResourceType='APPLICATION_LOAD_BALANCER'
-            )
-            for resource_arn in response.get('ResourceArns', []):
-                resource_info = self.parse_resource_arn(resource_arn)
-                resource_info['resource_type_api'] = 'APPLICATION_LOAD_BALANCER'
-                associated_resources.append(resource_info)
-        except Exception as e:
-            # 如果资源类型不支持或没有权限，静默处理
-            pass
-
         # 如果是 CLOUDFRONT scope，获取 CloudFront 分配
         if scope == 'CLOUDFRONT':
             try:
+                if debug:
+                    print(f"      [DEBUG] 尝试获取 CLOUDFRONT 资源...")
                 response = wafv2_client.list_resources_for_web_acl(
                     WebACLArn=web_acl_arn,
                     ResourceType='CLOUDFRONT'
                 )
-                for resource_arn in response.get('ResourceArns', []):
+                resource_arns = response.get('ResourceArns', [])
+                if debug:
+                    print(f"      [DEBUG] 找到 {len(resource_arns)} 个 CLOUDFRONT 资源")
+                for resource_arn in resource_arns:
                     resource_info = self.parse_resource_arn(resource_arn)
                     resource_info['resource_type_api'] = 'CLOUDFRONT'
                     associated_resources.append(resource_info)
             except Exception as e:
-                pass
+                if debug:
+                    print(f"      [DEBUG] 获取 CLOUDFRONT 资源失败: {str(e)}")
 
-        # 如果是 REGIONAL scope，获取其他资源类型
+        # 如果是 REGIONAL scope，获取所有支持的资源类型
         if scope == 'REGIONAL':
             resource_types = [
+                'APPLICATION_LOAD_BALANCER',
                 'API_GATEWAY',
                 'APPSYNC',
                 'APP_RUNNER_SERVICE',
@@ -183,17 +202,22 @@ class WAFConfigExtractor:
 
             for resource_type in resource_types:
                 try:
+                    if debug:
+                        print(f"      [DEBUG] 尝试获取 {resource_type} 资源...")
                     response = wafv2_client.list_resources_for_web_acl(
                         WebACLArn=web_acl_arn,
                         ResourceType=resource_type
                     )
-                    for resource_arn in response.get('ResourceArns', []):
+                    resource_arns = response.get('ResourceArns', [])
+                    if debug and len(resource_arns) > 0:
+                        print(f"      [DEBUG] 找到 {len(resource_arns)} 个 {resource_type} 资源")
+                    for resource_arn in resource_arns:
                         resource_info = self.parse_resource_arn(resource_arn)
                         resource_info['resource_type_api'] = resource_type
                         associated_resources.append(resource_info)
                 except Exception as e:
-                    # 某些资源类型可能不支持或没有关联
-                    pass
+                    if debug:
+                        print(f"      [DEBUG] 获取 {resource_type} 资源失败: {str(e)}")
 
         return associated_resources
 
@@ -228,7 +252,7 @@ class WAFConfigExtractor:
                     associated_resources = []
                     if web_acl_arn:
                         associated_resources = self.get_associated_resources(
-                            wafv2, web_acl_arn, scope
+                            wafv2, web_acl_arn, scope, self.debug
                         )
 
                     web_acl_data = {
@@ -420,36 +444,47 @@ def main():
         epilog="""
 示例用法:
 
-  # 扫描配置文件中的账户
-  python get_waf_config.py
+  # 使用配置文件 waf_scan_config.json（推荐）
+  python3 get_waf_config.py
 
   # 扫描特定 profile
-  python get_waf_config.py -p AdministratorAccess-275261018177
+  python3 get_waf_config.py -p AdministratorAccess-275261018177
 
   # 扫描多个 profile
-  python get_waf_config.py -p profile1 profile2 profile3
+  python3 get_waf_config.py -p profile1 profile2 profile3
 
-  # 只扫描特定区域
-  python get_waf_config.py -r us-east-1 us-west-2
+  # 只扫描特定区域（命令行参数优先于配置文件）
+  python3 get_waf_config.py -r us-east-1 us-west-2
+
+  # 使用配置文件的 profiles，但指定区域
+  python3 get_waf_config.py -r us-east-1
+
+  # 启用调试模式查看详细信息
+  python3 get_waf_config.py --debug
 
   # 指定输出文件
-  python get_waf_config.py -o my_waf_report.json
+  python3 get_waf_config.py -o my_waf_report.json
 
   # 串行扫描（不并行）
-  python get_waf_config.py --no-parallel
+  python3 get_waf_config.py --no-parallel
+
+配置文件:
+  默认读取当前目录下的 waf_scan_config.json
+  如果不存在，请复制 waf_scan_config.json.example 并修改
+  命令行参数优先级高于配置文件
         """
     )
 
     parser.add_argument(
         '-p', '--profiles',
         nargs='+',
-        help='要扫描的 AWS CLI profile 名称（默认使用所有 SSO profile）'
+        help='要扫描的 AWS CLI profile 名称（默认从 waf_scan_config.json 读取）'
     )
 
     parser.add_argument(
         '-r', '--regions',
         nargs='+',
-        help='要扫描的 AWS 区域列表'
+        help='要扫描的 AWS 区域列表（默认从配置文件读取 common 区域组）'
     )
 
     parser.add_argument(
@@ -463,26 +498,52 @@ def main():
         help='禁用并行扫描'
     )
 
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='启用调试模式，显示详细的资源获取信息'
+    )
+
     args = parser.parse_args()
+
+    # 尝试从配置文件加载默认配置
+    config = load_config_file()
 
     # 确定要使用的 profiles
     if args.profiles:
         profiles = args.profiles
+    elif config and 'profiles' in config:
+        # 从配置文件读取 profiles
+        profiles = config['profiles']
+        print(f"✓ 从配置文件加载了 {len(profiles)} 个 AWS profiles")
     else:
-        # 如果没有指定 profile，尝试从配置文件读取
-        # 用户需要在代码中设置或通过 -p 参数指定
-        print("错误: 请使用 -p 参数指定要扫描的 AWS profile")
+        # 如果既没有命令行参数，也没有配置文件
+        print("❌ 错误: 未指定要扫描的 AWS profile")
+        print("\n请选择以下方式之一:")
+        print("  1. 使用命令行参数: python3 get_waf_config.py -p your-profile-name")
+        print("  2. 创建配置文件: 复制 waf_scan_config.json.example 为 waf_scan_config.json 并配置")
         print("\n示例:")
-        print("  python3 get_waf_config.py -p your-profile-name")
         print("  python3 get_waf_config.py -p profile1 profile2 profile3")
-        print("\n或者编辑此文件，在第 476 行左右设置默认 profiles")
+        print("  python3 get_waf_config.py  # 使用配置文件中的 profiles")
         import sys
         sys.exit(1)
+
+    # 确定要使用的区域
+    if args.regions:
+        regions = args.regions
+    elif config and 'regions' in config and 'common' in config['regions']:
+        # 从配置文件读取默认区域（使用 common 区域组）
+        regions = config['regions']['common']
+        print(f"✓ 从配置文件加载了 {len(regions)} 个扫描区域")
+    else:
+        # 使用代码中定义的默认区域
+        regions = None
 
     # 创建提取器
     extractor = WAFConfigExtractor(
         profile_names=profiles,
-        regions=args.regions
+        regions=regions,
+        debug=args.debug
     )
 
     # 执行扫描
