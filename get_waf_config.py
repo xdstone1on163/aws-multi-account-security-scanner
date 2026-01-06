@@ -178,14 +178,21 @@ class WAFConfigExtractor:
             try:
                 if debug:
                     print(f"      [DEBUG] 尝试获取 CLOUDFRONT 关联资源...")
+                    print(f"      [DEBUG] Web ACL ARN: {web_acl_arn}")
                 # 对于 CLOUDFRONT scope，不传递 ResourceType 参数
                 response = wafv2_client.list_resources_for_web_acl(
                     WebACLArn=web_acl_arn
                 )
                 resource_arns = response.get('ResourceArns', [])
                 if debug:
+                    print(f"      [DEBUG] API 响应: ResourceArns = {resource_arns}")
                     print(f"      [DEBUG] 找到 {len(resource_arns)} 个 CLOUDFRONT 资源")
+                    if len(resource_arns) == 0:
+                        print(f"      [DEBUG] ⚠️  此 Web ACL 未关联任何 CloudFront 分配")
+                        print(f"      [DEBUG] 提示: 检查 CloudFront 控制台或使用 AWS CLI 验证")
                 for resource_arn in resource_arns:
+                    if debug:
+                        print(f"      [DEBUG] 解析资源: {resource_arn}")
                     resource_info = self.parse_resource_arn(resource_arn)
                     resource_info['resource_type_api'] = 'CLOUDFRONT'
                     associated_resources.append(resource_info)
