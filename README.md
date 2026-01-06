@@ -34,7 +34,6 @@ python3 get_waf_config.py -p profile1 profile2 -r us-east-1 us-west-2
 | **get_waf_config.py** | Python | 核心提取工具 | 从 AWS 提取 WAF 配置，可独立使用或通过 waf_scan.sh 调用 |
 | **analyze_waf_config.py** | Python | 配置分析工具 | 分析扫描结果，生成报告和统计 |
 | **check_waf_resources.sh** | Shell | 调试验证工具 | 调试特定 Web ACL 的资源关联问题 |
-| **security_check.sh** | Shell | 安全检查工具 | 分享代码前检查敏感信息 |
 
 ### 调用流程
 
@@ -66,11 +65,10 @@ python3 get_waf_config.py -p profile1 profile2 -r us-east-1 us-west-2
 └─────────────────────┘
 
             可选工具
-┌──────────────────────┬──────────────────────┐
-│                      │                      │
-│ check_waf_resources.sh│ security_check.sh    │
-│ (调试资源关联)        │ (检查敏感信息)        │
-└──────────────────────┴──────────────────────┘
+┌──────────────────────┐
+│ check_waf_resources.sh│
+│ (调试资源关联)        │
+└──────────────────────┘
 ```
 
 ## 功能特性
@@ -455,33 +453,6 @@ python3 analyze_waf_config.py waf_config_20260105_143022.json
 - ✅ 调试资源检测问题
 - ✅ 快速检查单个 ACL 的状态
 
-### 工具 2：安全检查工具
-
-**安全工具：`security_check.sh`**
-
-在分享代码或提交到 Git 前，运行这个脚本检查敏感信息：
-
-```bash
-./security_check.sh
-```
-
-**检查项目：**
-- ❌ WAF 配置输出文件（包含账户信息）
-- ❌ 硬编码的 AWS Profile 名称
-- ❌ 真实的 AWS 账户 ID
-- ❌ AWS 凭证信息
-- ❌ CSV 导出文件
-- ✅ .gitignore 配置正确性
-
-**快速清理命令：**
-```bash
-# 删除所有敏感文件
-rm -f waf_config_*.json *.csv
-
-# 检查 Git 状态
-git status
-```
-
 ## 常见问题
 
 ### Q1: SSO Token 过期怎么办？
@@ -634,17 +605,14 @@ python3 get_waf_config.py \
 如果要分享此代码给他人，**必须先清理敏感信息**：
 
 ```bash
-# 1. 运行安全检查
-./security_check.sh
-
-# 2. 删除敏感文件
+# 删除所有包含敏感信息的输出文件
 rm -f waf_config_*.json *.csv
 
-# 3. 查看详细指南
-cat SHARING_GUIDE.md
+# 检查 Git 状态，确保没有暂存敏感文件
+git status
 ```
 
-详细的分享准备指南请参考：`SHARING_GUIDE.md`
+⚠️ **注意**：输出的 JSON 和 CSV 文件包含 AWS 账户 ID、资源 ARN 等敏感信息，不应提交到公开仓库。
 
 ## 贡献和反馈
 
