@@ -2,21 +2,83 @@
 
 从多个 AWS member account 中自动提取 WAF v2 Web ACL 配置的 Python 工具集。
 
-## 🚀 快速开始
+## 🌍 跨平台支持
 
-**新用户推荐：使用交互式脚本**
+本工具现在支持 **Windows**、**macOS** 和 **Linux**！
 
-```bash
-# 1. 运行主扫描工具（自动检查环境、登录 SSO、扫描 WAF 配置）
-./waf_scan.sh
+### 目录结构
 
-# 2. 根据菜单选择扫描模式（推荐选择"1-快速扫描"）
-
-# 3. 扫描完成后，使用分析工具查看结果
-python3 analyze_waf_config.py waf_config_*.json --list
+```
+waf-config-tool/
+├── unix/           # Unix 用户：bash 脚本入口
+├── windows/        # Windows 用户：快速入门文档
+├── core/           # 共享的核心模块
+├── waf_cli.py      # 统一的跨平台入口点
+└── ...
 ```
 
-**高级用户：直接使用 Python 脚本**
+### Windows 用户
+
+👉 **查看详细文档**: [windows/README.md](windows/README.md)
+
+**一行命令开始**:
+```powershell
+# 安装依赖
+pip install -r requirements.txt
+
+# 交互式扫描
+python waf_cli.py scan --interactive
+```
+
+### Unix 用户（macOS/Linux）
+
+**方式 1: 使用 bash 脚本（传统方式）**
+```bash
+cd unix/
+./waf_scan.sh
+```
+
+**方式 2: 使用跨平台 Python 工具（推荐）**
+```bash
+python3 waf_cli.py scan --interactive
+```
+
+---
+
+## 🚀 快速开始
+
+### 新用户推荐：交互式扫描
+
+**跨平台方式（Windows/macOS/Linux）：**
+
+```bash
+python waf_cli.py scan --interactive
+```
+
+**Unix 传统方式：**
+
+```bash
+cd unix/
+./waf_scan.sh
+```
+
+### 高级用户：命令行模式
+
+```bash
+# 使用配置文件快速扫描
+python waf_cli.py scan
+
+# 指定 profile 扫描
+python waf_cli.py scan -p profile1 profile2
+
+# 指定区域
+python waf_cli.py scan -p my-profile -r us-east-1 us-west-2
+
+# 分析结果
+python waf_cli.py analyze waf_config_*.json --list
+```
+
+### 或直接使用原始 Python 脚本
 
 ```bash
 # 快速扫描（使用配置文件）
@@ -24,16 +86,35 @@ python3 get_waf_config.py
 
 # 自定义扫描
 python3 get_waf_config.py -p profile1 profile2 -r us-east-1 us-west-2
+
+# 分析结果
+python3 analyze_waf_config.py waf_config_*.json --list
 ```
 
 ## 📁 工具脚本说明
 
+### 跨平台工具
+
 | 脚本 | 类型 | 用途 | 使用场景 |
 |------|------|------|----------|
-| **waf_scan.sh** | Shell | **主入口** - 交互式扫描工具 | ⭐ 推荐新用户使用，提供完整的环境检查和菜单引导 |
-| **get_waf_config.py** | Python | 核心提取工具 | 从 AWS 提取 WAF 配置，可独立使用或通过 waf_scan.sh 调用 |
+| **waf_cli.py** | Python | **统一 CLI 入口** | ⭐ 推荐所有用户使用，跨平台支持，提供子命令架构 |
+| **get_waf_config.py** | Python | 核心提取工具 | 从 AWS 提取 WAF 配置，可独立使用或通过 waf_cli.py 调用 |
 | **analyze_waf_config.py** | Python | 配置分析工具 | 分析扫描结果，生成报告和统计 |
-| **check_waf_resources.sh** | Shell | 调试验证工具 | 调试特定 Web ACL 的资源关联问题 |
+
+### Unix 专用工具（在 `unix/` 目录）
+
+| 脚本 | 类型 | 用途 | 使用场景 |
+|------|------|------|----------|
+| **unix/waf_scan.sh** | Shell | 交互式扫描工具（Bash） | Unix 用户的传统入口，功能与 waf_cli.py 相同 |
+| **unix/check_waf_resources.sh** | Shell | 调试验证工具（Bash） | 调试特定 Web ACL 的资源关联问题 |
+
+### 核心模块（在 `core/` 目录）
+
+| 模块 | 用途 |
+|------|------|
+| **core/waf_environment.py** | 环境检查（Python、boto3、AWS CLI、SSO 登录状态） |
+| **core/waf_interactive.py** | 交互式菜单实现 |
+| **core/waf_resource_checker.py** | 资源关联检查（替代 check_waf_resources.sh） |
 
 ### 调用流程
 
@@ -88,14 +169,26 @@ python3 get_waf_config.py -p profile1 profile2 -r us-east-1 us-west-2
 ## 前置要求
 
 ### 1. Python 环境
+
 ```bash
 python3 --version  # 需要 Python 3.7+
 ```
 
+**Windows 用户**: 从 https://www.python.org/downloads/ 下载安装
+
 ### 2. 安装依赖
+
 ```bash
-pip3 install boto3
+# 推荐：使用 requirements.txt 安装所有依赖
+pip install -r requirements.txt
+
+# 或手动安装
+pip install boto3 colorama
 ```
+
+**依赖说明**:
+- `boto3`: AWS SDK，用于调用 AWS API
+- `colorama`: 跨平台颜色输出支持（Windows 兼容）
 
 ### 3. AWS 认证配置
 
