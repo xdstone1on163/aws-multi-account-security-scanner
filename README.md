@@ -1,6 +1,10 @@
-# AWS Multi-Account WAF 配置提取工具
+# AWS 多账户 WAF/ALB 配置提取工具集
 
-从多个 AWS member account 中自动提取 WAF v2 Web ACL 配置的 Python 工具集。
+从多个 AWS member account 中自动提取 WAF v2 Web ACL 和 ALB 配置的 Python 工具集。
+
+**包含两个独立工具**:
+- 🛡️ **WAF 工具**: 提取 WAF v2 Web ACL 配置和关联资源
+- 🔀 **ALB 工具**: 提取 ALB/NLB 配置和 WAF 绑定状态
 
 ## 🌍 跨平台支持
 
@@ -9,11 +13,16 @@
 ### 目录结构
 
 ```
-waf-config-tool/
-├── unix/           # Unix 用户：bash 脚本入口
-├── windows/        # Windows 用户：快速入门文档
-├── core/           # 共享的核心模块
-├── waf_cli.py      # 统一的跨平台入口点
+waf-alb-config-tool/
+├── unix/                      # Unix 用户：bash 脚本入口
+├── windows/                   # Windows 用户：快速入门文档
+├── core/                      # 共享的核心模块
+├── waf_cli.py                 # WAF 工具统一入口
+├── alb_cli.py                 # ALB 工具统一入口（新增）
+├── get_waf_config.py          # WAF 核心扫描器
+├── get_alb_config.py          # ALB 核心扫描器（新增）
+├── analyze_waf_config.py      # WAF 分析工具
+├── analyze_alb_config.py      # ALB 分析工具（新增）
 └── ...
 ```
 
@@ -64,6 +73,7 @@ cd unix/
 
 ### 高级用户：命令行模式
 
+**WAF 工具:**
 ```bash
 # 使用配置文件快速扫描
 python waf_cli.py scan
@@ -71,11 +81,28 @@ python waf_cli.py scan
 # 指定 profile 扫描
 python waf_cli.py scan -p profile1 profile2
 
-# 指定区域
-python waf_cli.py scan -p my-profile -r us-east-1 us-west-2
-
 # 分析结果
 python waf_cli.py analyze waf_config_*.json --list
+```
+
+**ALB 工具（新增）:**
+```bash
+# 交互式扫描
+python alb_cli.py scan --interactive
+
+# Quick 模式：只获取基本信息和 WAF 状态
+python alb_cli.py scan --mode quick
+
+# Standard 模式：包含监听器、目标组、安全组
+python alb_cli.py scan --mode standard
+
+# Full 模式：包含监听器规则和目标健康状态
+python alb_cli.py scan --mode full
+
+# 分析结果并查看扫描模式信息
+python alb_cli.py analyze alb_config_*.json --stats
+python alb_cli.py analyze alb_config_*.json --waf-coverage
+python alb_cli.py analyze alb_config_*.json --no-waf
 ```
 
 ### 或直接使用原始 Python 脚本
@@ -97,9 +124,12 @@ python3 analyze_waf_config.py waf_config_*.json --list
 
 | 脚本 | 类型 | 用途 | 使用场景 |
 |------|------|------|----------|
-| **waf_cli.py** | Python | **统一 CLI 入口** | ⭐ 推荐所有用户使用，跨平台支持，提供子命令架构 |
-| **get_waf_config.py** | Python | 核心提取工具 | 从 AWS 提取 WAF 配置，可独立使用或通过 waf_cli.py 调用 |
-| **analyze_waf_config.py** | Python | 配置分析工具 | 分析扫描结果，生成报告和统计 |
+| **waf_cli.py** | Python | **WAF 统一 CLI 入口** | ⭐ WAF 工具推荐入口，跨平台支持 |
+| **alb_cli.py** | Python | **ALB 统一 CLI 入口** | ⭐ ALB 工具推荐入口，跨平台支持（新增） |
+| **get_waf_config.py** | Python | WAF 核心提取工具 | 从 AWS 提取 WAF 配置 |
+| **get_alb_config.py** | Python | ALB 核心提取工具 | 从 AWS 提取 ALB 配置（新增） |
+| **analyze_waf_config.py** | Python | WAF 配置分析工具 | 分析 WAF 扫描结果，生成报告和统计 |
+| **analyze_alb_config.py** | Python | ALB 配置分析工具 | 分析 ALB 扫描结果，WAF 覆盖率审计（新增） |
 
 ### Unix 专用工具（在 `unix/` 目录）
 
@@ -154,6 +184,7 @@ python3 analyze_waf_config.py waf_config_*.json --list
 
 ## 功能特性
 
+### WAF 工具
 ✅ 支持 AWS Identity Center (SSO) 多账户认证
 ✅ 并行扫描多个账户和区域
 ✅ 同时支持 CLOUDFRONT 和 REGIONAL scope
@@ -165,6 +196,18 @@ python3 analyze_waf_config.py waf_config_*.json --list
 ✅ CSV 导出功能
 ✅ 关联资源统计分析
 ✅ 交互式扫描脚本，易于使用
+
+### ALB 工具（新增）
+✅ 跨账号扫描 ALB/NLB 配置
+✅ **三种扫描模式**：Quick（基本+WAF）/ Standard（+监听器+目标组）/ Full（+规则+健康状态）
+✅ **反向 WAF 查询**：从 ALB 查询绑定的 WAF ACL
+✅ WAF 覆盖率分析和安全审计
+✅ 监听器和目标组统计
+✅ 实时目标健康状态检查（Full 模式）
+✅ 安全组详情提取
+✅ 按类型/区域统计分析
+✅ CSV 导出功能
+✅ 智能提示不同扫描模式的差异
 
 ## 前置要求
 
@@ -211,7 +254,7 @@ aws_secret_access_key = YOUR_SECRET_KEY
 
 ### 4. 所需权限
 
-确保你的 Identity Center 权限集或 IAM 用户具备以下权限：
+#### WAF 工具权限
 
 ```json
 {
@@ -232,9 +275,38 @@ aws_secret_access_key = YOUR_SECRET_KEY
 }
 ```
 
-**新增权限说明**：
+**权限说明**：
 - `wafv2:ListResourcesForWebACL` - 获取 WAF ACL 关联的 AWS 资源（ALB、API Gateway 等）
 - `cloudfront:ListDistributionsByWebACLId` - 获取 CloudFront distributions 与 WAF ACL 的关联关系
+
+#### ALB 工具权限（新增）
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeRules",
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeTargetHealth",
+        "wafv2:GetWebACLForResource",
+        "ec2:DescribeSecurityGroups",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+**权限说明**：
+- `elasticloadbalancing:*` - 获取 ALB/NLB 配置、监听器、目标组和健康状态
+- `wafv2:GetWebACLForResource` - **反向查询**：从 ALB ARN 查询绑定的 WAF ACL
+- `ec2:DescribeSecurityGroups` - 获取安全组详情
 
 可选（如需列出所有账户）：
 ```json
@@ -421,6 +493,217 @@ python3 analyze_waf_config.py waf_config_20260105_143022.json --csv waf_report.c
 # 执行所有分析
 python3 analyze_waf_config.py waf_config_20260105_143022.json
 ```
+
+---
+
+## ALB 工具使用指南（新增）
+
+### 第一步：扫描 ALB 配置
+
+**扫描工具：`alb_cli.py` 或 `get_alb_config.py`**
+
+#### 交互式扫描（推荐）
+```bash
+python alb_cli.py scan --interactive
+```
+
+这个命令会：
+1. ✅ 显示交互式菜单
+2. ✅ 选择扫描模式（Quick/Standard/Full）
+3. ✅ 自动加载配置文件或手动指定账户/区域
+
+#### 三种扫描模式
+
+**Quick 模式** - 快速 WAF 覆盖率审计
+```bash
+python alb_cli.py scan --mode quick
+```
+- ✅ ALB 基本信息（名称、状态、DNS、类型）
+- ✅ WAF 关联状态
+- ⏱️ 最快速度
+- 💰 最少 API 调用
+
+**Standard 模式（默认）** - 标准配置审计
+```bash
+python alb_cli.py scan --mode standard
+# 或
+python alb_cli.py scan
+```
+- ✅ Quick 模式的所有内容
+- ✅ 监听器配置（协议、端口、证书）
+- ✅ 目标组配置（健康检查设置）
+- ✅ 安全组详情
+- ⚖️ 平衡速度和详细度
+
+**Full 模式** - 完整配置和健康状态
+```bash
+python alb_cli.py scan --mode full
+```
+- ✅ Standard 模式的所有内容
+- ✅ 监听器规则详情（转发规则、条件）
+- ✅ **实时目标健康状态**（healthy/unhealthy/draining）
+- 📊 最详细信息
+- ⏱️ 速度较慢，API 调用最多
+
+#### 其他扫描选项
+```bash
+# 指定单个或多个账户
+python alb_cli.py scan -p profile1 profile2 --mode standard
+
+# 指定区域
+python alb_cli.py scan -p my-profile -r us-east-1 us-west-2
+
+# 启用调试模式
+python alb_cli.py scan --debug
+
+# 禁用并行扫描
+python alb_cli.py scan --no-parallel
+```
+
+#### 输出示例
+```
+================================================================================
+正在扫描账户: AdministratorAccess-813923830882
+================================================================================
+✓ 账户 ID: 813923830882
+
+  扫描区域: us-east-1
+    ✓ 发现 2 个负载均衡器
+    • bedrock-proxy-no-peering (Network Load Balancer) - ✗ 无 WAF
+    • for-graviton-jupyter-notebook (Application Load Balancer) - ✓ 有 WAF (lingoace-demo)
+
+================================================================================
+扫描摘要
+================================================================================
+
+账户 813923830882:
+  - us-east-1: 2 个 ALB (1 个有 WAF, 1 个无 WAF)
+
+总计: 2 个 ALB, 1 个有 WAF (50.0%), 1 个无 WAF (50.0%)
+
+================================================================================
+✓ 结果已保存到: alb_config_20260114_161119.json
+================================================================================
+```
+
+### 第二步：分析 ALB 配置
+
+**分析工具：`analyze_alb_config.py`**
+
+#### 查看扫描信息和模式
+```bash
+# 所有分析命令都会自动显示扫描模式信息
+python alb_cli.py analyze alb_config_*.json --stats
+```
+
+输出示例：
+```
+================================================================================
+扫描信息
+================================================================================
+
+账户: 813923830882 (AdministratorAccess-813923830882)
+  扫描时间: 2026-01-14T08:11:42.839488+00:00
+  扫描模式: Full 模式（+ 监听器规则 + 目标健康状态）
+
+================================================================================
+高级统计（基于扫描模式）
+================================================================================
+
+监听器统计:
+  总监听器数: 2
+  协议分布:
+    HTTP: 1
+    TCP: 1
+
+目标组统计:
+  总目标组数: 2
+  协议分布:
+    HTTP: 1
+    TCP: 1
+
+监听器规则统计（Full 模式）:
+  总规则数: 2
+
+目标健康状态（Full 模式）:
+  总目标数: 3
+    ✅ healthy: 2 (66.7%)
+    ⚠️ unhealthy: 1 (33.3%)
+```
+
+#### WAF 覆盖率分析（安全审计）
+```bash
+python alb_cli.py analyze alb_config_*.json --waf-coverage
+```
+
+输出示例：
+```
+================================================================================
+WAF 覆盖率分析
+================================================================================
+
+按账户统计:
+
+  账户 813923830882:
+    总 ALB 数: 2
+    有 WAF: 1 (50.0%)
+    无 WAF: 1 (50.0%)
+
+全局统计:
+  总 ALB 数: 2
+  有 WAF: 1 (50.0%)
+  无 WAF: 1 (50.0%)
+```
+
+#### 列出未绑定 WAF 的 ALB（安全审计）
+```bash
+python alb_cli.py analyze alb_config_*.json --no-waf
+```
+
+输出示例：
+```
+================================================================================
+未绑定 WAF 的 ALB（安全审计）
+================================================================================
+
+账户: 813923830882
+
+  区域: us-east-1
+    ⚠️  bedrock-proxy-no-peering
+        类型: Network Load Balancer
+        方案: internet-facing
+        DNS: bedrock-proxy-no-peering-b5eb7bbcbcc3fccf.elb.us-east-1.amazonaws.com
+```
+
+#### 列出所有 ALB
+```bash
+python alb_cli.py analyze alb_config_*.json --list
+```
+
+#### 按类型/区域统计
+```bash
+python alb_cli.py analyze alb_config_*.json --by-type
+python alb_cli.py analyze alb_config_*.json --by-region
+```
+
+#### 搜索特定 ALB
+```bash
+# 搜索名称包含 "notebook" 的 ALB
+python alb_cli.py analyze alb_config_*.json --search notebook
+```
+
+#### 导出为 CSV
+```bash
+python alb_cli.py analyze alb_config_*.json --csv alb_report.csv
+```
+
+#### 综合分析
+```bash
+# 执行所有分析（包含扫描模式信息）
+python alb_cli.py analyze alb_config_*.json
+```
+
+---
 
 ## 输出数据结构
 
@@ -663,11 +946,18 @@ python3 get_waf_config.py \
 
 **输出文件包含敏感信息！**
 
-生成的 JSON 文件包含：
+WAF 工具生成的 JSON 文件包含：
 - AWS 账户 ID
 - 资源 ARN（包含账户、区域、资源 ID）
 - Web ACL 配置详情
 - 关联资源信息
+
+ALB 工具生成的 JSON 文件包含：
+- AWS 账户 ID
+- ALB/NLB 配置详情（DNS、VPC、安全组）
+- 监听器和目标组配置
+- 目标健康状态（Full 模式）
+- WAF 绑定信息
 
 ### 🔒 最佳实践
 
@@ -675,7 +965,9 @@ python3 get_waf_config.py \
    ```bash
    # .gitignore 已配置忽略这些文件
    waf_config_*.json
-   *.csv
+   alb_config_*.json
+   waf_*.csv
+   alb_*.csv
    ```
 
 2. ⚠️ **使用只读权限**
@@ -703,13 +995,13 @@ python3 get_waf_config.py \
 
 ```bash
 # 删除所有包含敏感信息的输出文件
-rm -f waf_config_*.json *.csv
+rm -f waf_config_*.json alb_config_*.json waf_*.csv alb_*.csv
 
 # 检查 Git 状态，确保没有暂存敏感文件
 git status
 ```
 
-⚠️ **注意**：输出的 JSON 和 CSV 文件包含 AWS 账户 ID、资源 ARN 等敏感信息，不应提交到公开仓库。
+⚠️ **注意**：输出的 JSON 和 CSV 文件包含 AWS 账户 ID、资源 ARN、ALB 配置等敏感信息，不应提交到公开仓库。
 
 ## 贡献和反馈
 

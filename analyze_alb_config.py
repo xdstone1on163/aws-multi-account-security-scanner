@@ -378,7 +378,8 @@ class ALBConfigAnalyzer:
                     emoji = "✅" if state == "healthy" else "⚠️" if state == "unhealthy" else "🔄"
                     print(f"    {emoji} {state}: {count} ({percentage:.1f}%)")
         else:
-            print("\n💡 提示: 使用 --mode full 可以查看监听器规则和目标健康状态详情")
+            print("\n💡 提示: 用 full 模式重新扫描可查看监听器规则和目标健康状态")
+            print("   命令: python alb_cli.py scan --mode full")
 
     def export_csv(self, output_file: str):
         """导出为 CSV"""
