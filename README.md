@@ -852,6 +852,210 @@ python alb_cli.py analyze alb_config_*.json
 
 ---
 
+## Route53 工具使用指南（新增）
+
+### 第一步：扫描 Route53 配置
+
+**核心工具：`get_route53_config.py`**
+
+Route53 是全局服务，工具会自动扫描所有 Public Hosted Zones 和 DNS 记录。
+
+#### 使用配置文件扫描（推荐）
+```bash
+# 使用独立配置文件
+python route53_cli.py scan
+
+# 或使用统一配置文件（aws_multi_account_scan_config.json）
+python route53_cli.py scan
+```
+
+#### 指定账户扫描
+```bash
+# 单个账户
+python route53_cli.py scan -p AdministratorAccess-275261018177
+
+# 多个账户
+python route53_cli.py scan -p profile1 profile2 profile3
+```
+
+#### 其他扫描选项
+```bash
+# 启用调试模式（查看详细的 API 调用日志）
+python route53_cli.py scan --debug
+
+# 禁用并行扫描（串行处理，便于调试）
+python route53_cli.py scan --no-parallel
+
+# 指定输出文件名
+python route53_cli.py scan -o my_route53_config.json
+```
+
+#### 输出示例
+```
+================================================================================
+正在扫描账户: AdministratorAccess-813923830882
+================================================================================
+✓ 账户 ID: 813923830882
+
+正在扫描 Hosted Zones...
+    扫描公有 Zone: example.com.
+    扫描公有 Zone: example.org.
+    ⊘ 跳过私有 Zone (VPC level): internal.local.
+
+✓ 扫描完成:
+  - 公有 Hosted Zones: 2
+  - 总 DNS 记录: 47
+
+================================================================================
+总体统计
+================================================================================
+扫描账户数: 1
+公有 Hosted Zones: 2
+总 DNS 记录: 47
+
+================================================================================
+✓ 结果已保存到: route53_config_20260114_180000.json
+================================================================================
+```
+
+### 第二步：分析 Route53 配置
+
+**分析工具：`analyze_route53_config.py`**
+
+#### 列出所有 Hosted Zones
+```bash
+python route53_cli.py analyze route53_config_*.json --list
+```
+
+输出示例：
+```
+================================================================================
+Hosted Zones 列表
+================================================================================
+
+账户: 813923830882 (AdministratorAccess-813923830882)
+  扫描时间: 2026-01-14T10:00:00.000000+00:00
+
+Zone 1: example.com.
+  类型: 公有
+  记录数: 25
+  NS 服务器: ns-123.awsdns-12.com, ns-456.awsdns-45.org
+
+Zone 2: example.org.
+  类型: 公有
+  记录数: 22
+  NS 服务器: ns-789.awsdns-78.net, ns-012.awsdns-01.co.uk
+
+总计: 2 个 Public Hosted Zones, 47 条 DNS 记录
+```
+
+#### 按 DNS 记录类型统计
+```bash
+python route53_cli.py analyze route53_config_*.json --by-record-type
+```
+
+输出示例：
+```
+================================================================================
+DNS 记录类型统计
+================================================================================
+
+A 记录: 15 (31.9%)
+AAAA 记录: 3 (6.4%)
+CNAME 记录: 12 (25.5%)
+MX 记录: 4 (8.5%)
+TXT 记录: 8 (17.0%)
+NS 记录: 4 (8.5%)
+SOA 记录: 1 (2.1%)
+
+总计: 47 条 DNS 记录
+```
+
+#### 按 Zone 类型统计
+```bash
+python route53_cli.py analyze route53_config_*.json --by-zone-type
+```
+
+输出示例：
+```
+================================================================================
+Zone 类型统计
+================================================================================
+
+公有 Zones: 2 (100.0%)
+  - 总记录数: 47
+  - 平均每个 Zone: 23.5 条记录
+
+总计: 2 个 Hosted Zones
+```
+
+#### 路由策略统计
+```bash
+python route53_cli.py analyze route53_config_*.json --routing-policies
+```
+
+输出示例：
+```
+================================================================================
+路由策略统计
+================================================================================
+
+Simple (简单): 42 (89.4%)
+Weighted (加权): 3 (6.4%)
+Failover (故障转移): 2 (4.3%)
+
+总计: 47 条 DNS 记录
+```
+
+#### 安全审计 - 查找缺少健康检查的记录
+```bash
+python route53_cli.py analyze route53_config_*.json --missing-health-checks
+```
+
+输出示例：
+```
+================================================================================
+缺少健康检查的记录（安全审计）
+================================================================================
+
+⚠️  以下记录使用了高级路由策略但缺少健康检查:
+
+Zone: example.com.
+  - api.example.com (Failover: PRIMARY) - 无健康检查
+  - api.example.com (Failover: SECONDARY) - 无健康检查
+
+建议: 为故障转移和加权路由策略的记录配置健康检查，以确保高可用性。
+
+总计: 2 条记录需要注意
+```
+
+#### 搜索功能
+```bash
+# 按名称搜索（支持模糊匹配）
+python route53_cli.py analyze route53_config_*.json --search api
+
+# 按记录值搜索（IP 地址、CNAME 目标等）
+python route53_cli.py analyze route53_config_*.json --search-value 192.0.2.1
+```
+
+#### 导出 CSV
+```bash
+python route53_cli.py analyze route53_config_*.json --csv route53_report.csv
+```
+
+CSV 包含字段：
+- Account_ID, Profile, Zone_Name, Zone_Type
+- Record_Name, Record_Type, TTL, Value
+- Alias_Target, Routing_Policy, Health_Check_ID
+
+#### 综合分析（一次显示所有统计）
+```bash
+# 直接运行不带参数，显示所有基础统计
+python route53_cli.py analyze route53_config_*.json
+```
+
+---
+
 ## 输出数据结构
 
 ### JSON 格式
