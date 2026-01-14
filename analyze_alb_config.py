@@ -21,6 +21,37 @@ class ALBConfigAnalyzer:
         with open(json_file, 'r', encoding='utf-8') as f:
             self.data = json.load(f)
 
+        # 检测扫描模式（从第一个账户读取）
+        self.scan_modes = {}
+        for account in self.data:
+            account_id = account.get('account_info', {}).get('account_id', 'Unknown')
+            self.scan_modes[account_id] = account.get('scan_mode', 'unknown')
+
+    def show_scan_info(self):
+        """显示扫描信息"""
+        print("\n" + "="*80)
+        print("扫描信息")
+        print("="*80)
+
+        mode_descriptions = {
+            'quick': 'Quick 模式（基本信息 + WAF 关联）',
+            'standard': 'Standard 模式（+ 监听器 + 目标组 + 安全组）',
+            'full': 'Full 模式（+ 监听器规则 + 目标健康状态）',
+            'unknown': '未知模式'
+        }
+
+        for account in self.data:
+            account_id = account.get('account_info', {}).get('account_id', 'Unknown')
+            profile = account.get('profile', 'Unknown')
+            scan_time = account.get('scan_time', 'Unknown')
+            scan_mode = account.get('scan_mode', 'unknown')
+
+            mode_desc = mode_descriptions.get(scan_mode, scan_mode)
+
+            print(f"\n账户: {account_id} ({profile})")
+            print(f"  扫描时间: {scan_time}")
+            print(f"  扫描模式: {mode_desc}")
+
     def list_all_albs(self):
         """列出所有 ALB"""
         print("\n" + "="*80)
@@ -252,6 +283,103 @@ class ALBConfigAnalyzer:
         if not found_any:
             print(f"\n未找到匹配 '{name_pattern}' 的 ALB")
 
+    def analyze_advanced_stats(self):
+        """根据扫描模式分析高级统计（Standard/Full 模式专用）"""
+        # 检查是否有任何 standard 或 full 模式的数据
+        has_advanced_data = any(
+            mode in ['standard', 'full']
+            for mode in self.scan_modes.values()
+        )
+
+        if not has_advanced_data:
+            print("\n" + "="*80)
+            print("高级统计（需要 Standard 或 Full 模式）")
+            print("="*80)
+            print("\n⚠️  当前数据为 Quick 模式，不包含监听器、目标组等高级信息")
+            print("   请使用 --mode standard 或 --mode full 重新扫描")
+            return
+
+        print("\n" + "="*80)
+        print("高级统计（基于扫描模式）")
+        print("="*80)
+
+        # 统计监听器和目标组（Standard 和 Full 模式）
+        total_listeners = 0
+        total_target_groups = 0
+        total_rules = 0
+        total_targets = 0
+        health_states = defaultdict(int)
+
+        listener_protocols = defaultdict(int)
+        target_group_protocols = defaultdict(int)
+
+        for account in self.data:
+            scan_mode = account.get('scan_mode', 'unknown')
+
+            for region_data in account.get('regions', []):
+                for alb in region_data.get('load_balancers', []):
+                    # 监听器统计（standard 和 full）
+                    if scan_mode in ['standard', 'full']:
+                        listeners = alb.get('listeners', [])
+                        total_listeners += len(listeners)
+
+                        for listener in listeners:
+                            protocol = listener.get('Protocol', 'Unknown')
+                            listener_protocols[protocol] += 1
+
+                            # 规则统计（仅 full 模式）
+                            if scan_mode == 'full':
+                                rules = listener.get('Rules', [])
+                                total_rules += len(rules)
+
+                        # 目标组统计
+                        target_groups = alb.get('target_groups', [])
+                        total_target_groups += len(target_groups)
+
+                        for tg in target_groups:
+                            protocol = tg.get('Protocol', 'Unknown')
+                            target_group_protocols[protocol] += 1
+
+                            # 目标健康状态统计（仅 full 模式）
+                            if scan_mode == 'full':
+                                target_health = tg.get('target_health', [])
+                                total_targets += len(target_health)
+
+                                for target in target_health:
+                                    state = target.get('TargetHealth', {}).get('State', 'Unknown')
+                                    health_states[state] += 1
+
+        # 打印统计
+        print("\n监听器统计:")
+        print(f"  总监听器数: {total_listeners}")
+        if listener_protocols:
+            print("  协议分布:")
+            for protocol, count in sorted(listener_protocols.items(), key=lambda x: x[1], reverse=True):
+                print(f"    {protocol}: {count}")
+
+        print("\n目标组统计:")
+        print(f"  总目标组数: {total_target_groups}")
+        if target_group_protocols:
+            print("  协议分布:")
+            for protocol, count in sorted(target_group_protocols.items(), key=lambda x: x[1], reverse=True):
+                print(f"    {protocol}: {count}")
+
+        # Full 模式专有统计
+        has_full_mode = any(mode == 'full' for mode in self.scan_modes.values())
+        if has_full_mode:
+            print("\n监听器规则统计（Full 模式）:")
+            print(f"  总规则数: {total_rules}")
+
+            print("\n目标健康状态（Full 模式）:")
+            print(f"  总目标数: {total_targets}")
+            if health_states:
+                for state, count in sorted(health_states.items(), key=lambda x: x[1], reverse=True):
+                    percentage = (count / total_targets * 100) if total_targets > 0 else 0
+                    emoji = "✅" if state == "healthy" else "⚠️" if state == "unhealthy" else "🔄"
+                    print(f"    {emoji} {state}: {count} ({percentage:.1f}%)")
+        else:
+            print("\n💡 提示: 使用 --mode full 可以查看监听器规则和目标健康状态详情")
+
     def export_csv(self, output_file: str):
         """导出为 CSV"""
         print(f"\n导出到 CSV: {output_file}")
@@ -312,6 +440,8 @@ def main():
     parser.add_argument('--list', action='store_true', help='列出所有 ALB')
     parser.add_argument('--waf-coverage', action='store_true', help='分析 WAF 覆盖率')
     parser.add_argument('--no-waf', action='store_true', help='列出未绑定 WAF 的 ALB')
+    parser.add_argument('--stats', action='store_true',
+                        help='显示高级统计（监听器、目标组、健康状态等，需要 Standard/Full 模式）')
     parser.add_argument('--by-type', action='store_true', help='按类型统计')
     parser.add_argument('--by-region', action='store_true', help='按区域统计')
     parser.add_argument('--search', help='搜索指定名称的 ALB')
@@ -323,13 +453,17 @@ def main():
     analyzer = ALBConfigAnalyzer(args.json_file)
 
     # 如果没有指定任何选项，执行全部分析
-    if not any([args.list, args.waf_coverage, args.no_waf, args.by_type,
+    if not any([args.list, args.waf_coverage, args.no_waf, args.stats, args.by_type,
                 args.by_region, args.search, args.csv]):
+        analyzer.show_scan_info()
         analyzer.list_all_albs()
         analyzer.analyze_waf_coverage()
+        analyzer.analyze_advanced_stats()
         analyzer.analyze_by_type()
         analyzer.analyze_by_region()
     else:
+        # 始终先显示扫描信息
+        analyzer.show_scan_info()
         # 执行指定的分析
         if args.list:
             analyzer.list_all_albs()
@@ -339,6 +473,9 @@ def main():
 
         if args.no_waf:
             analyzer.find_without_waf()
+
+        if args.stats:
+            analyzer.analyze_advanced_stats()
 
         if args.by_type:
             analyzer.analyze_by_type()
