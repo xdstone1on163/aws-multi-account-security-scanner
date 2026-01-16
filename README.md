@@ -1,11 +1,20 @@
-# AWS 多账户 WAF/ALB/Route53 配置提取工具集
+# AWS 多账户安全配置扫描和可视化工具集
 
-从多个 AWS member account 中自动提取 WAF v2 Web ACL、ALB 和 Route53 DNS 配置的 Python 工具集。
+从多个 AWS member account 中自动提取和关联分析 WAF、ALB、Route53 配置的完整工具集。
 
-**包含三个独立工具**:
+## ✨ 核心能力
+
+**🔍 三个独立扫描工具**:
 - 🛡️ **WAF 工具**: 提取 WAF v2 Web ACL 配置和关联资源
 - 🔀 **ALB 工具**: 提取 ALB/NLB 配置和 WAF 绑定状态
-- 🌐 **Route53 工具**: 提取 Hosted Zone 和 DNS Records 配置（新增）
+- 🌐 **Route53 工具**: 提取 Hosted Zone 和 DNS Records 配置
+
+**🔗 跨工具关联分析和可视化（2026-01-16 新增）**:
+- 📊 **关联分析**: 自动匹配 DNS → ALB → WAF 的完整安全保护链
+- 🎨 **交互式可视化**: 网络图、树状图、统计仪表盘、漏洞列表
+- 🔐 **安全审计**: 自动检测未保护的公网 ALB、孤儿 DNS 记录、未使用的 WAF
+- 📈 **覆盖率分析**: 计算 WAF 保护覆盖率，追踪安全配置质量
+- 📄 **HTML 报告**: 单文件交互式报告，无需服务器，直接浏览器打开
 
 ## 🌍 跨平台支持
 
@@ -14,19 +23,28 @@
 ### 目录结构
 
 ```
-waf-alb-route53-config-tool/
-├── unix/                      # Unix 用户：bash 脚本入口
-├── windows/                   # Windows 用户：快速入门文档
-├── core/                      # 共享的核心模块
-├── waf_cli.py                 # WAF 工具统一入口
-├── alb_cli.py                 # ALB 工具统一入口
-├── route53_cli.py             # Route53 工具统一入口（新增）
-├── get_waf_config.py          # WAF 核心扫描器
-├── get_alb_config.py          # ALB 核心扫描器
-├── get_route53_config.py      # Route53 核心扫描器（新增）
-├── analyze_waf_config.py      # WAF 分析工具
-├── analyze_alb_config.py      # ALB 分析工具
-├── analyze_route53_config.py  # Route53 分析工具（新增）
+aws-multi-account-security-scanner/
+├── unix/                           # Unix 用户：bash 脚本入口
+├── windows/                        # Windows 用户：快速入门文档
+├── core/                           # 共享的核心模块
+├── templates/                      # 可视化报告模板（新增）
+│   ├── report_template.html       # HTML 主模板
+│   ├── network_graph.js           # D3.js 网络图
+│   ├── tree_diagram.js            # D3.js 树状图
+│   ├── dashboard_charts.js        # Chart.js 统计图表
+│   └── styles.css                 # 响应式样式
+├── waf_cli.py                      # WAF 工具统一入口
+├── alb_cli.py                      # ALB 工具统一入口
+├── route53_cli.py                  # Route53 工具统一入口
+├── security_audit_cli.py           # 关联分析工具入口（新增）
+├── get_waf_config.py               # WAF 核心扫描器
+├── get_alb_config.py               # ALB 核心扫描器
+├── get_route53_config.py           # Route53 核心扫描器
+├── correlate_security_config.py    # 关联分析引擎（新增）
+├── security_visualizer.py          # 可视化生成器（新增）
+├── analyze_waf_config.py           # WAF 分析工具
+├── analyze_alb_config.py           # ALB 分析工具
+├── analyze_route53_config.py       # Route53 分析工具
 └── ...
 ```
 
@@ -60,7 +78,35 @@ python3 waf_cli.py scan --interactive
 
 ## 🚀 快速开始
 
-### 新用户推荐：交互式扫描
+### 🎯 推荐工作流：完整安全审计
+
+```bash
+# 1. 运行所有扫描工具
+python waf_cli.py scan
+python alb_cli.py scan
+python route53_cli.py scan
+
+# 2. 生成交互式可视化报告
+python security_audit_cli.py correlate \
+    waf_config_*.json \
+    alb_config_*.json \
+    route53_config_*.json
+
+# 3. 在浏览器中查看报告
+open security_audit_report_*.html  # macOS
+```
+
+**报告包含**：
+- 🕸️ 网络关系图（DNS → ALB → WAF）
+- 🌲 层级树状图（账户/区域/类型）
+- 📊 WAF 覆盖率统计
+- ⚠️ 安全漏洞列表（未保护 ALB、孤儿 DNS 等）
+
+---
+
+### 🔍 单工具使用
+
+#### 新用户推荐：交互式扫描
 
 **跨平台方式（Windows/macOS/Linux）：**
 
@@ -75,7 +121,7 @@ cd unix/
 ./waf_scan.sh
 ```
 
-### 高级用户：命令行模式
+#### 高级用户：命令行模式
 
 **WAF 工具:**
 ```bash
@@ -89,7 +135,7 @@ python waf_cli.py scan -p profile1 profile2
 python waf_cli.py analyze waf_config_*.json --list
 ```
 
-**ALB 工具（新增）:**
+**ALB 工具:**
 ```bash
 # 交互式扫描
 python alb_cli.py scan --interactive
