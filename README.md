@@ -16,6 +16,9 @@
 - 📈 **覆盖率分析**: 计算 WAF 保护覆盖率，追踪安全配置质量
 - 📄 **HTML 报告**: 单文件交互式报告，无需服务器，直接浏览器打开
 
+<img width="2534" height="1294" alt="Screenshot 2026-01-16 at 11 51 04 AM" src="https://github.com/user-attachments/assets/b8f0c0ff-fad8-4a4f-90c3-2683ea5bc774" />
+
+
 ## 🌍 跨平台支持
 
 本工具现在支持 **Windows**、**macOS** 和 **Linux**！
